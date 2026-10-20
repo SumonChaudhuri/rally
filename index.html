@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detective Riddle Rally</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Detective palette: "indigo" becomes oxblood red, "amber" becomes brass / manila
+        if (window.tailwind) tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        indigo: { 50: '#fbf1ee', 100: '#f5ddd6', 200: '#e9b8aa', 300: '#d98f7d', 400: '#c4654f', 500: '#a8432f', 600: '#8b2e1f', 700: '#73241a', 800: '#5c1d16', 900: '#3f1511', 950: '#2a0d0a' },
+                        amber:  { 50: '#fbf6e9', 100: '#f3e7c4', 200: '#e8d39a', 300: '#d9bc6c', 400: '#c9a24a', 500: '#b08633', 600: '#8f6a28', 700: '#6f5222', 800: '#57411d', 900: '#463519' }
+                    }
+                }
+            }
+        };
+    </script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fonts: typewriter headings for the case-file look -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(ellipse at top, #3b3027 0%, #1f1915 55%, #110d0b 100%) fixed;
+            background-color: #1f1915;
+        }
+        .hidden { display: none !important; }
+        h1, h2, h3, .font-fun, .typewriter { font-family: 'Special Elite', 'Courier New', monospace; letter-spacing: 0.02em; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1f1915; }
+        ::-webkit-scrollbar-thumb { background: #6f5222; border-radius: 4px; }
+
+        /* Case-file paper */
+        .glass-card {
+            background-color: #f6eedb;
+            background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(111, 82, 34, 0.08) 27px, rgba(111, 82, 34, 0.08) 28px);
+            border: 2px solid #d8c79f;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+        }
+
+        /* Rubber stamp */
+        .stamp {
+            display: inline-block;
+            font-family: 'Special Elite', 'Courier New', monospace;
+            color: #8b2e1f;
+            border: 3px double #8b2e1f;
+            border-radius: 6px;
+            padding: 2px 10px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            transform: rotate(-6deg);
+            opacity: 0.85;
+        }
+
+        /* Shake on wrong answer */
+        .shake { animation: shake 0.4s; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+
+        /* Torn-photo slider tiles */
+        #slide-board { position: relative; overflow: hidden; }
+        .slide-tile {
+            position: absolute;
+            background-repeat: no-repeat;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: left 0.25s ease, top 0.25s ease;
+            filter: sepia(0.35);
+        }
+        .slide-tile:active { filter: sepia(0.35) brightness(1.08); }
+
+        /* Code wheel */
+        .wheel-inner { transition: transform 0.25s ease; transform-origin: 150px 150px; cursor: grab; }
+        .wheel-inner.dragging { transition: none; cursor: grabbing; }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-stone-950/85 backdrop-blur-md border-b border-amber-900/50 sticky top-0 z-40 px-4 py-3 shadow-lg">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-400 text-stone-900 p-2.5 rounded-2xl shadow-md transform -rotate-3">
+                    <i class="fa-solid fa-user-secret text-2xl"></i>
+                </div>
+                <div>
+                    <h1 id="app-title" class="text-2xl font-bold tracking-wide text-amber-100 leading-tight">Detective Riddle Rally</h1>
+                    <p id="app-subtitle" class="text-xs font-semibold text-amber-400">Build a classroom case – the class cracks it</p>
+                </div>
+            </div>
+
+            <div id="mode-tabs" class="flex flex-wrap justify-center bg-stone-800 p-1.5 rounded-xl border border-stone-700 text-sm font-semibold">
+                <button id="nav-build-btn" onclick="switchTab('build')"><i class="fa-solid fa-folder-open"></i><span>1. Build the Case</span></button>
+                <button id="nav-play-btn" onclick="switchTab('play')"><i class="fa-solid fa-magnifying-glass"></i><span>2. Investigate / Preview</span></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 mt-6">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: CASE BUILDER                         -->
+        <!-- ========================================== -->
+        <section id="tab-build" class="space-y-6">
+
+            <div class="glass-card rounded-2xl p-6 border-l-8 border-l-indigo-700">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <span class="stamp text-xs mb-3">Top Secret</span>
+                        <h2 class="text-2xl font-bold text-slate-900 mt-1">The Secret Location</h2>
+                        <p class="text-sm text-slate-600">The place your detectives must uncover. Every letter is a piece of evidence with its own clue.</p>
+                    </div>
+                    <input type="text" id="target-word-input" maxlength="15" autocomplete="off" spellcheck="false"
+                        class="px-4 py-3 bg-white border-2 border-amber-300 rounded-xl font-mono text-2xl font-bold tracking-widest text-indigo-900 uppercase focus:outline-none focus:border-indigo-600 shadow-inner w-64 max-w-full text-center"
+                        oninput="onWordInput(this)">
+                </div>
+                <p id="word-info" class="text-xs font-semibold text-slate-500 mt-3"></p>
+
+                <div class="mt-4 pt-4 border-t border-amber-300/60">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Evidence letters &amp; their clues (click to edit):</p>
+                    <div id="word-slots" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row gap-6">
+                <div class="w-full lg:w-1/3 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-amber-100 flex items-center gap-2">
+                            <i class="fa-solid fa-folder-tree text-amber-400"></i> Case Clues
+                        </h3>
+                        <span id="riddle-count" class="px-2.5 py-0.5 bg-amber-200 text-amber-900 rounded-full text-xs font-bold"></span>
+                    </div>
+                    <div id="riddle-list" class="space-y-3"></div>
+                    <p class="text-xs text-amber-200/70">Use the arrows to change the order. Clue 1 always reveals letter 1, and so on.</p>
+                </div>
+
+                <div class="w-full lg:w-2/3">
+                    <div id="editor" class="glass-card rounded-2xl p-6"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: INVESTIGATE / PREVIEW                -->
+        <!-- ========================================== -->
+        <section id="tab-play" class="hidden space-y-6">
+
+            <div id="preview-bar" class="max-w-3xl mx-auto px-4 py-3 rounded-xl bg-stone-800 border border-stone-600 text-sm text-amber-100 flex flex-wrap items-center justify-between gap-2">
+                <span id="preview-text"></span>
+                <button onclick="startPlay()" class="px-3 py-1.5 bg-amber-400 text-stone-900 rounded-lg text-xs font-bold hover:bg-amber-300">
+                    <i class="fa-solid fa-dice"></i> New random versions
+                </button>
+            </div>
+
+            <div class="glass-card rounded-2xl p-6 text-center">
+                <span class="stamp text-xs">Case File · Confidential</span>
+                <h2 class="text-3xl font-black text-slate-900 mt-3 font-fun">Crack the Case!</h2>
+                <p class="text-slate-600 text-sm max-w-lg mx-auto mt-1">Every clue you crack reveals one letter of the secret location. Collect all the evidence to close the case, detective!</p>
+                <div id="play-slots" class="flex justify-center flex-wrap gap-2 sm:gap-3 my-6"></div>
+                <div id="play-steps" class="flex justify-center items-center gap-2 flex-wrap"></div>
+            </div>
+
+            <div id="play-card" class="glass-card rounded-2xl p-6 sm:p-8 max-w-3xl mx-auto border-t-8 border-t-indigo-700"></div>
+
+            <div id="victory-screen" class="hidden glass-card rounded-2xl p-8 max-w-xl mx-auto text-center border-4 border-amber-400">
+                <div class="w-20 h-20 bg-stone-900 text-amber-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 animate-bounce">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <span class="stamp text-lg mb-3">Case Closed</span>
+                <h2 class="text-4xl font-black text-slate-900 font-fun mb-2 mt-2">Brilliant work, detective!</h2>
+                <p class="text-slate-600 font-medium mb-6">You cracked every clue. The secret location is:</p>
+                <div id="victory-word" class="text-4xl sm:text-5xl font-black font-mono tracking-widest text-indigo-700 py-4 px-6 bg-amber-50 border-2 border-dashed border-amber-400 rounded-2xl mb-4 inline-block shadow-inner break-all"></div>
+                <p id="victory-hints" class="text-sm font-semibold text-slate-500 mb-8"></p>
+                <button onclick="startPlay()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> Open a New Case
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 left-5 sm:left-auto transform translate-y-20 opacity-0 pointer-events-none transition-all duration-300 bg-stone-900 border border-amber-700 text-amber-50 px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 z-50">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-message" class="text-sm font-semibold"></span>
+    </div>
+
+<script>
+// =========================================================================
+// CONSTANTS & CONTENT BANKS
+// =========================================================================
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const STORAGE_KEY = 'riddleRally.v2';
+
+const TYPES = {
+    crossword: { label: 'Missing Word',      icon: 'fa-border-all',     desc: 'Detectives fill in letter boxes to answer a clue.' },
+    sliding:   { label: 'Torn Photo',        icon: 'fa-puzzle-piece',   desc: 'A piece of photo evidence was torn up – detectives slide the pieces back into place. Each tip restores one more row.' },
+    cipher:    { label: 'Secret Code Wheel', icon: 'fa-dharmachakra',   desc: 'An intercepted message – detectives turn a code wheel to decode it. The code is created automatically from your word.' },
+    scramble:  { label: 'Jumbled Note',      icon: 'fa-shuffle',        desc: 'A note with mixed-up letters was found at the scene – detectives put them back in order. Letters are shuffled fresh every game.' },
+    quiz:      { label: 'Interrogation',     icon: 'fa-user-secret',    desc: 'A suspect answers in riddles – detectives pick the right answer from four options.' }
+};
+const TYPE_ORDER = Object.keys(TYPES);
+const OLD_LABELS = { 'Word Boxes': 'Missing Word', 'Picture Slider': 'Torn Photo', 'Code Wheel': 'Secret Code Wheel', 'Word Scramble': 'Jumbled Note', 'Riddle Quiz': 'Interrogation' };
+
+const WORDS = [
+    { w: 'LEARN',    c: 'What you do at school to gain new knowledge every day.' },
+    { w: 'BOOK',     c: 'Pages bound together, full of stories.' },
+    { w: 'PENCIL',   c: 'You write with it, and you can rub out its marks.' },
+    { w: 'TEACHER',  c: 'The person who leads the class.' },
+    { w: 'RULER',    c: 'A straight tool for drawing lines and measuring.' },
+    { w: 'SCIENCE',  c: 'The subject with experiments and microscopes.' },
+    { w: 'PAPER',    c: 'You write and draw on sheets of it.' },
+    { w: 'HISTORY',  c: 'The school subject about what happened long ago.' },
+    { w: 'QUIZ',     c: 'A short test with questions.' },
+    { w: 'GLOBE',    c: 'A round model of the Earth.' },
+    { w: 'MUSIC',    c: 'The subject where you sing and play instruments.' },
+    { w: 'FRIEND',   c: 'Someone you like to spend break time with.' },
+    { w: 'BACKPACK', c: 'You carry your books to school in it.' },
+    { w: 'VOLCANO',  c: 'A mountain that can erupt with hot lava.' },
+    { w: 'ZEBRA',    c: 'A striped animal from Africa.' },
+    { w: 'EXAM',     c: 'A big test at the end of a term.' },
+    { w: 'JIGSAW',   c: 'A puzzle made of many interlocking pieces.' },
+    { w: 'MATHS',    c: 'The subject with numbers and sums.' },
+    { w: 'WINDOW',   c: 'Glass in the wall that lets the light in.' },
+    { w: 'YOGURT',   c: 'A creamy snack that comes in a small pot.' },
+    { w: 'KEYBOARD', c: 'It has keys but opens no locks.' }
+];
+
+const QUIZ = [
+    { q: "I have keys but no locks. I have space but no room. You can enter, but you can't go outside. What am I?", o: ['A house', 'A keyboard', 'A backpack', 'A school bus'], a: 1, h: 'You use me with a computer.' },
+    { q: 'What has hands but cannot clap?', o: ['A clock', 'A glove', 'A robot', 'A tree'], a: 0, h: 'It hangs on the classroom wall and tells you when break starts.' },
+    { q: 'The more of me you take, the more you leave behind. What am I?', o: ['Photos', 'Footsteps', 'Cookies', 'Notes'], a: 1, h: 'Think about walking.' },
+    { q: 'What has a neck but no head?', o: ['A bottle', 'A snake', 'A shirt', 'A guitar case'], a: 0, h: 'You can drink from it.' },
+    { q: 'What gets wetter the more it dries?', o: ['A sponge', 'A towel', 'Rain', 'A puddle'], a: 1, h: 'You use it after a shower.' }
+];
+
+// =========================================================================
+// BUILT-IN PICTURES FOR THE SLIDER (drawn as SVG, no image files needed)
+// =========================================================================
+function picLibrary() {
+    let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#fef3c7"/>';
+    for (let x = 0; x < 300; x += 30) s += `<rect x="${x}" y="0" width="15" height="236" fill="#fde68a"/>`;
+    // window
+    s += '<rect x="186" y="20" width="96" height="88" rx="4" fill="#7dd3fc" stroke="#78350f" stroke-width="6"/><circle cx="256" cy="44" r="12" fill="#facc15"/><path d="M189 105 L214 74 L234 94 L254 78 L279 105Z" fill="#22c55e"/><line x1="234" y1="20" x2="234" y2="108" stroke="#78350f" stroke-width="4"/><line x1="186" y1="64" x2="282" y2="64" stroke="#78350f" stroke-width="4"/>';
+    // bookshelf
+    s += '<rect x="12" y="12" width="164" height="224" fill="#7c2d12"/><rect x="20" y="20" width="148" height="208" fill="#431407"/>';
+    const cols = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#f97316', '#14b8a6', '#ec4899', '#0ea5e9'];
+    let ci = 0;
+    [20, 88, 156].forEach((sy, si) => {
+        let x = 22;
+        while (true) {
+            const w = 9 + ((ci * 7 + si * 5) % 10);
+            const h = 38 + ((ci * 11 + si * 7) % 22);
+            if (x + w > 166) break;
+            s += `<rect x="${x}" y="${sy + 60 - h}" width="${w}" height="${h}" fill="${cols[ci % cols.length]}" stroke="#1e293b" stroke-width="1"/><rect x="${x + 2}" y="${sy + 60 - h + 7}" width="${w - 4}" height="3" fill="#ffffff" opacity="0.6"/>`;
+            x += w + 1; ci++;
+        }
+        s += `<rect x="20" y="${sy + 60}" width="148" height="8" fill="#7c2d12"/>`;
+    });
+    // floor & rug
+    s += '<rect x="0" y="236" width="300" height="64" fill="#b45309"/><line x1="0" y1="258" x2="300" y2="258" stroke="#92400e" stroke-width="2"/><line x1="0" y1="280" x2="300" y2="280" stroke="#92400e" stroke-width="2"/>';
+    s += '<ellipse cx="96" cy="270" rx="78" ry="18" fill="#dc2626"/><ellipse cx="96" cy="270" rx="56" ry="11" fill="#fbbf24"/>';
+    // desk, globe, lamp, open book
+    s += '<rect x="186" y="172" width="108" height="10" fill="#78350f"/><rect x="192" y="182" width="9" height="62" fill="#78350f"/><rect x="279" y="182" width="9" height="62" fill="#78350f"/>';
+    s += '<rect x="206" y="160" width="20" height="12" fill="#475569"/><circle cx="216" cy="140" r="17" fill="#3b82f6" stroke="#1e3a8a" stroke-width="2"/><path d="M206 132 Q214 124 222 132 Q226 142 216 146 Q206 146 206 132Z" fill="#22c55e"/>';
+    s += '<rect x="264" y="164" width="18" height="8" fill="#334155"/><line x1="273" y1="164" x2="266" y2="134" stroke="#334155" stroke-width="4"/><path d="M248 138 L276 128 L270 112 L244 122Z" fill="#16a34a"/><path d="M252 140 L262 166 L272 136Z" fill="#fde047" opacity="0.5"/>';
+    s += '<path d="M232 172 Q244 160 256 168 L256 172Z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><path d="M256 172 L256 168 Q266 160 278 168 L278 172Z" fill="#f8fafc" stroke="#1e293b" stroke-width="1.5"/>';
+    return s + '</svg>';
+}
+
+function picTreasure() {
+    let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#38bdf8"/>';
+    [[20, 30], [90, 20], [150, 40], [30, 110], [20, 190], [250, 120], [270, 200], [200, 270], [120, 285], [260, 260], [190, 20]].forEach(([x, y]) => {
+        s += `<path d="M${x} ${y} q7 -7 14 0 q7 7 14 0" fill="none" stroke="#e0f2fe" stroke-width="3" stroke-linecap="round"/>`;
+    });
+    // island
+    s += '<path d="M58 150 C48 92 120 56 180 70 C240 82 262 140 240 192 C222 240 140 252 100 232 C70 216 64 190 58 150Z" fill="#fde68a" stroke="#d97706" stroke-width="4"/>';
+    s += '<path d="M104 112 C114 86 168 82 184 102 C198 122 178 142 152 140 C126 142 100 132 104 112Z" fill="#22c55e"/>';
+    s += '<path d="M158 206 L184 160 L210 206Z" fill="#a8a29e"/><path d="M176 174 L184 160 L192 174 L184 170Z" fill="#ffffff"/>';
+    const palm = (x, y) => `<g transform="translate(${x} ${y})"><path d="M0 0 Q5 -18 2 -36" stroke="#92400e" stroke-width="5" fill="none"/>` +
+        [-30, 30, -70, 70].map(r => `<ellipse cx="2" cy="-36" rx="16" ry="5" transform="rotate(${r} 2 -36) translate(${r < 0 ? -12 : 12} 0)" fill="#15803d"/>`).join('') + '</g>';
+    s += palm(90, 190) + palm(120, 214) + palm(222, 130);
+    // dashed path & X
+    s += '<path d="M82 214 C108 192 124 222 150 200 S176 152 200 132" fill="none" stroke="#b91c1c" stroke-width="4" stroke-dasharray="8 7" stroke-linecap="round"/>';
+    s += '<line x1="196" y1="116" x2="220" y2="140" stroke="#b91c1c" stroke-width="8" stroke-linecap="round"/><line x1="220" y1="116" x2="196" y2="140" stroke="#b91c1c" stroke-width="8" stroke-linecap="round"/>';
+    // compass
+    s += '<circle cx="250" cy="52" r="30" fill="#fffbeb" stroke="#78350f" stroke-width="3"/><polygon points="250,24 256,46 250,52 244,46" fill="#b91c1c"/><polygon points="250,80 256,58 250,52 244,58" fill="#1e293b"/><polygon points="222,52 244,46 250,52 244,58" fill="#64748b"/><polygon points="278,52 256,46 250,52 256,58" fill="#64748b"/>';
+    // boat
+    s += '<path d="M18 262 L74 262 L64 278 L28 278Z" fill="#78350f"/><line x1="46" y1="262" x2="46" y2="222" stroke="#78350f" stroke-width="3"/><path d="M49 226 L70 258 L49 258Z" fill="#ffffff"/><path d="M43 230 L26 258 L43 258Z" fill="#f1f5f9"/><path d="M46 222 L60 228 L46 233Z" fill="#ef4444"/>';
+    return s + '</svg>';
+}
+
+function picSpace() {
+    let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#1e1b4b"/>';
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let k = 0; k < 70; k++) s += `<circle cx="${(rnd() * 300).toFixed(1)}" cy="${(rnd() * 300).toFixed(1)}" r="${(0.6 + rnd() * 1.6).toFixed(1)}" fill="#ffffff" opacity="${(0.5 + rnd() * 0.5).toFixed(2)}"/>`;
+    // ringed planet
+    s += '<circle cx="70" cy="78" r="36" fill="#f97316"/><path d="M40 70 Q70 60 100 70" stroke="#fdba74" stroke-width="6" fill="none"/><path d="M38 88 Q70 80 102 90" stroke="#c2410c" stroke-width="5" fill="none"/><ellipse cx="70" cy="80" rx="62" ry="13" fill="none" stroke="#fde68a" stroke-width="5" transform="rotate(-15 70 80)"/>';
+    // moon
+    s += '<circle cx="246" cy="58" r="24" fill="#cbd5e1"/><circle cx="238" cy="50" r="5" fill="#94a3b8"/><circle cx="254" cy="66" r="7" fill="#94a3b8"/><circle cx="252" cy="46" r="3" fill="#94a3b8"/>';
+    // earth
+    s += '<circle cx="244" cy="244" r="42" fill="#2563eb"/><path d="M216 230 Q230 212 248 222 Q256 240 238 248 Q222 252 216 230Z" fill="#22c55e"/><path d="M252 256 Q270 246 278 262 Q268 280 252 272Z" fill="#22c55e"/>';
+    // comet
+    s += '<path d="M20 230 L80 200" stroke="#a5f3fc" stroke-width="3" stroke-linecap="round" opacity="0.7"/><circle cx="82" cy="199" r="5" fill="#ecfeff"/>';
+    // rocket
+    s += '<g transform="translate(150 160) rotate(35)"><path d="M0 -72 C24 -46 24 20 17 42 L-17 42 C-24 20 -24 -46 0 -72Z" fill="#f1f5f9" stroke="#334155" stroke-width="3"/><path d="M0 -72 C10 -62 15 -54 17 -46 L-17 -46 C-15 -54 -10 -62 0 -72Z" fill="#ef4444"/><circle cx="0" cy="-16" r="11" fill="#38bdf8" stroke="#334155" stroke-width="3"/><path d="M-17 18 L-36 50 L-17 42Z" fill="#ef4444"/><path d="M17 18 L36 50 L17 42Z" fill="#ef4444"/><path d="M-11 42 Q0 92 11 42Z" fill="#f97316"/><path d="M-6 42 Q0 70 6 42Z" fill="#fde047"/></g>';
+    return s + '</svg>';
+}
+
+const PICTURES = {
+    library:  { name: 'Library bookshelf',   svg: picLibrary() },
+    treasure: { name: 'Treasure island map', svg: picTreasure() },
+    space:    { name: 'Rocket in space',     svg: picSpace() }
+};
+Object.values(PICTURES).forEach(p => p.url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(p.svg));
+const PICTURE_KEYS = Object.keys(PICTURES);
+
+// =========================================================================
+// HELPERS
+// =========================================================================
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// Letters only (German umlauts allowed for normal word puzzles)
+function cleanWord(s, max = 15) {
+    return String(s || '').toUpperCase().replace(/[^A-ZÄÖÜ]/g, '').slice(0, max);
+}
+// Code wheel only knows A–Z, so umlauts are converted (Ä → AE, ß → SS)
+function cipherWord(s, max = 12) {
+    return String(s || '').toUpperCase().replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE').replace(/[^A-Z]/g, '').slice(0, max);
+}
+function clampInt(v, min, max, def) {
+    const n = parseInt(v, 10);
+    return isNaN(n) ? def : Math.min(max, Math.max(min, n));
+}
+function shiftLetter(ch, s) { return LETTERS[(LETTERS.indexOf(ch) + s) % 26]; }
+function encode(word, s) { return [...word].map(ch => shiftLetter(ch, s)).join(''); }
+function wordFor(letter, n) {
+    let list = WORDS.filter(x => x.w.includes(letter));
+    if (!list.length) list = WORDS;
+    return list[n % list.length];
+}
+function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+
+function toB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function fromB64(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+
+let toastTimer = null;
+function showToast(message, isError = false) {
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-message').innerText = message;
+    document.getElementById('toast-icon').className = isError
+        ? 'fa-solid fa-triangle-exclamation text-rose-400 text-lg'
+        : 'fa-solid fa-circle-check text-emerald-400 text-lg';
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2600);
+}
+
+function shakeEl(el) {
+    if (!el) return;
+    el.classList.remove('shake');
+    void el.offsetWidth;
+    el.classList.add('shake');
+}
+
+const INPUT = 'w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-medium bg-white focus:outline-none focus:border-indigo-500 transition-all';
+const BTN = 'px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all inline-flex items-center gap-2';
+const BTN2 = 'px-4 py-2 bg-white border-2 border-slate-200 hover:border-indigo-400 text-slate-700 font-bold rounded-xl text-sm transition-all inline-flex items-center gap-2';
+
+function field(label, inner) {
+    return `<label class="block space-y-1"><span class="block text-xs font-bold text-slate-600 uppercase">${label}</span>${inner}</label>`;
+}
+
+// =========================================================================
+// DATA MODEL
+//   rally = { targetWord, riddles: [ { type, title, variants: [ {...} ] } ], spare: [] }
+//   Riddle i always reveals letter i. Each riddle has 1+ versions;
+//   a random version is picked every time the rally is played.
+// =========================================================================
+function defaultVariant(type, letter, n = 0) {
+    switch (type) {
+        case 'crossword': { const x = wordFor(letter, n); return { word: x.w, clue: x.c, hint: '' }; }
+        case 'sliding':   return { picture: PICTURE_KEYS[n % PICTURE_KEYS.length], size: 3, task: 'Someone tore up this photo! Slide the pieces back into place to restore the evidence.', hint: '' };
+        case 'cipher':    { const x = wordFor(letter, n); return { word: x.w, shift: 3 + (n % 5), showKey: true, clue: 'We intercepted a coded message! Turn the code wheel to decode it.', hint: '' }; }
+        case 'scramble':  { const x = wordFor(letter, n + 1); return { word: x.w, clue: 'A jumbled note was found at the scene. Clue: ' + x.c, hint: '' }; }
+        case 'quiz':      { const q = QUIZ[n % QUIZ.length]; return { question: q.q, options: [...q.o], correct: q.a, hint: q.h }; }
+    }
+}
+
+function makeRiddle(type, letter, n) {
+    return { type, title: TYPES[type].label, variants: [defaultVariant(type, letter, n)] };
+}
+
+function exampleRally() {
+    return {
+        targetWord: 'LIBRARY',
+        riddles: [
+            { type: 'crossword', title: 'Missing Word', variants: [
+                { word: 'LEARN', clue: 'What you do at school to gain new knowledge every day.', hint: 'You do it when you study for a test.' },
+                { word: 'PENCIL', clue: 'You write with it, and you can rub out its marks.', hint: 'It is often yellow with an eraser on the end.' }
+            ]},
+            { type: 'sliding', title: 'Torn Photo', variants: [
+                { picture: 'library', size: 3, task: 'A photo of the crime scene was torn up! Slide the pieces back into place.', hint: '' },
+                { picture: 'space', size: 2, task: 'A suspect\'s holiday photo was ripped apart. Can you restore it?', hint: '' }
+            ]},
+            { type: 'cipher', title: 'Secret Code Wheel', variants: [
+                { word: 'BOOK', shift: 3, showKey: true, clue: 'We intercepted a coded message! Turn the code wheel to decode it.', hint: 'It has pages and a cover.' },
+                { word: 'STORY', shift: 5, showKey: true, clue: 'We intercepted a coded message! Turn the code wheel to decode it.', hint: 'It often begins with "Once upon a time".' }
+            ]},
+            { type: 'scramble', title: 'Jumbled Note', variants: [
+                { word: 'READING', clue: 'A jumbled note was found at the scene: something you do with books.', hint: '' },
+                { word: 'RULER', clue: 'A jumbled note was found at the scene: a tool for drawing straight lines.', hint: '' }
+            ]},
+            { type: 'quiz', title: 'Interrogation', variants: [
+                { question: QUIZ[0].q, options: [...QUIZ[0].o], correct: QUIZ[0].a, hint: QUIZ[0].h },
+                { question: QUIZ[1].q, options: [...QUIZ[1].o], correct: QUIZ[1].a, hint: QUIZ[1].h }
+            ]},
+            { type: 'crossword', title: 'Missing Word', variants: [
+                { word: 'RULER', clue: 'A straight tool for drawing lines and measuring.', hint: '' }
+            ]},
+            { type: 'scramble', title: 'Jumbled Note', variants: [
+                { word: 'HISTORY', clue: 'A jumbled note was found at the scene: the school subject about the past.', hint: '' }
+            ]}
+        ],
+        spare: []
+    };
+}
+
+// Turns any saved data (including files from the old version) into the current format
+function normalizeRally(d) {
+    const out = { targetWord: cleanWord(d && d.targetWord) || 'LIBRARY', riddles: [], spare: [] };
+    const src = Array.isArray(d && d.riddles) ? d.riddles : [];
+    src.forEach((r, i) => out.riddles.push(normalizeRiddle(r, out.targetWord[i] || 'A', i)));
+    (Array.isArray(d && d.spare) ? d.spare : []).slice(-30).forEach((r, i) => out.spare.push(normalizeRiddle(r, 'A', i)));
+    syncRiddleCount(out);
+    return out;
+}
+
+function normalizeRiddle(r, letter, i) {
+    r = r || {};
+    let type = r.type === 'logic' ? 'quiz' : r.type;
+    if (!TYPES[type]) type = 'crossword';
+    const raw = Array.isArray(r.variants) && r.variants.length ? r.variants : [legacyVariant(r, type)];
+    return {
+        type,
+        title: String(OLD_LABELS[r.title] || r.title || TYPES[type].label).slice(0, 60),
+        variants: raw.map((v, k) => normalizeVariant(type, v, letter, i + k))
+    };
+}
+
+function legacyVariant(r, type) {
+    switch (type) {
+        case 'crossword': return { word: r.word, clue: r.clue };
+        case 'sliding':   return {};
+        case 'cipher':    return { word: r.solution, shift: r.shiftKey, clue: r.clue };
+        case 'scramble':  return { word: r.unscrambledWord, clue: r.clue };
+        case 'quiz':      return { question: r.question, options: r.options, correct: r.correctIndex };
+    }
+    return {};
+}
+
+function normalizeVariant(type, v, letter, n) {
+    const base = defaultVariant(type, letter, n);
+    v = v || {};
+    const out = { ...base };
+    for (const k in base) if (v[k] !== undefined && v[k] !== null) out[k] = v[k];
+    ['clue', 'task', 'question', 'hint'].forEach(k => { if (k in out) out[k] = String(out[k]); });
+    if (type === 'crossword' || type === 'scramble') out.word = cleanWord(out.word, 12) || base.word;
+    if (type === 'cipher') {
+        out.word = cipherWord(out.word) || base.word;
+        out.shift = clampInt(out.shift, 1, 25, 3);
+        out.showKey = v.showKey === undefined ? true : !!v.showKey;
+    }
+    if (type === 'sliding') {
+        if (!PICTURES[out.picture]) out.picture = 'library';
+        out.size = [2, 3, 4].includes(+out.size) ? +out.size : 3;
+    }
+    if (type === 'quiz') {
+        const opts = Array.isArray(out.options) ? out.options.map(String) : [];
+        while (opts.length < 4) opts.push('');
+        out.options = opts.slice(0, 4);
+        out.correct = clampInt(out.correct, 0, 3, 0);
+    }
+    return out;
+}
+
+// One riddle per letter. Removed riddles are kept aside and come back if letters are added again.
+function syncRiddleCount(data) {
+    const len = data.targetWord.length;
+    while (data.riddles.length < len) {
+        const i = data.riddles.length;
+        data.riddles.push(data.spare.pop() || makeRiddle(TYPE_ORDER[i % TYPE_ORDER.length], data.targetWord[i], i));
+    }
+    while (data.riddles.length > len) data.spare.push(data.riddles.pop());
+    if (data.spare.length > 30) data.spare = data.spare.slice(-30);
+}
+
+// =========================================================================
+// APP STATE & STARTUP
+// =========================================================================
+let rally = null;
+let studentMode = false;
+let editIdx = 0;
+let editVar = 0;
+let play = null;
+
+function save() {
+    if (studentMode) return;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rally)); } catch (e) { /* storage unavailable */ }
+}
+function loadSaved() {
+    try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    const m = location.hash.match(/^#rally=(.+)$/);
+    if (m) {
+        try {
+            rally = normalizeRally(JSON.parse(fromB64(m[1])));
+            studentMode = true;
+        } catch (e) {
+            console.error(e);
+            showToast('This rally link is damaged. Ask your teacher for a new one.', true);
+        }
+    }
+    if (!rally) rally = normalizeRally(loadSaved() || exampleRally());
+
+    // Builder events (delegated)
+    const ed = document.getElementById('editor');
+    ed.addEventListener('input', onEditorInput);
+    ed.addEventListener('change', e => { if (e.target.id === 'type-select') changeType(e.target.value); });
+    ed.addEventListener('click', onEditorClick);
+    document.getElementById('riddle-list').addEventListener('click', onListClick);
+    document.getElementById('word-slots').addEventListener('click', e => {
+        const b = e.target.closest('[data-slot]');
+        if (b) selectRiddle(+b.dataset.slot);
+    });
+
+    if (studentMode) {
+        document.getElementById('mode-tabs').classList.add('hidden');
+        document.getElementById('preview-bar').classList.add('hidden');
+        document.getElementById('app-title').textContent = 'Detective Riddle Rally';
+        document.getElementById('app-subtitle').textContent = 'Crack every clue to uncover the secret location!';
+        switchTab('play');
+    } else {
+        renderBuilder();
+        switchTab('build');
+    }
+});
+
+// =========================================================================
+// NAVIGATION
+// =========================================================================
+const NAV_BASE = 'px-4 py-2 rounded-lg transition-all flex items-center space-x-2 ';
+function switchTab(name, opts) {
+    ['build', 'play'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+        document.getElementById('nav-' + t + '-btn').className = NAV_BASE + (t === name ? 'bg-indigo-600 text-white shadow-sm' : 'text-amber-100/70 hover:text-amber-100');
+    });
+    if (name === 'play') startPlay(opts || {});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+
+// =========================================================================
+// BUILDER
+// =========================================================================
+function renderBuilder() {
+    const input = document.getElementById('target-word-input');
+    if (input.value !== rally.targetWord) input.value = rally.targetWord;
+    const n = rally.riddles.length;
+    let info = `${plural(rally.targetWord.length, 'letter')} → ${plural(n, 'clue')}.`;
+    if (rally.spare.length) info += ` ${plural(rally.spare.length, 'clue')} filed away – they come back if you add letters again.`;
+    document.getElementById('word-info').textContent = info;
+    renderWordSlots();
+    renderRiddleList();
+    renderEditor();
+}
+
+function onWordInput(el) {
+    const c = cleanWord(el.value, 15);
+    if (el.value.toUpperCase() !== c) el.value = c;
+    if (!c) {
+        document.getElementById('word-info').textContent = 'The secret word needs at least one letter.';
+        return;
+    }
+    rally.targetWord = c;
+    syncRiddleCount(rally);
+    if (editIdx >= rally.riddles.length) { editIdx = rally.riddles.length - 1; editVar = 0; }
+    save();
+    renderBuilder();
+}
+
+function renderWordSlots() {
+    document.getElementById('word-slots').innerHTML = [...rally.targetWord].map((ch, i) => {
+        const r = rally.riddles[i];
+        const active = i === editIdx;
+        return `<button data-slot="${i}" title="Clue ${i + 1}: ${esc(TYPES[r.type].label)}" class="flex flex-col items-center border-2 rounded-xl p-2 min-w-[54px] shadow-sm transition-all ${active ? 'bg-indigo-50 border-indigo-600' : 'bg-white border-indigo-200 hover:border-indigo-400'}">
+            <span class="text-[10px] font-bold text-slate-400">#${i + 1}</span>
+            <span class="text-xl font-black font-mono text-indigo-700 leading-tight">${esc(ch)}</span>
+            <i class="fa-solid ${TYPES[r.type].icon} text-xs text-slate-500 mt-0.5"></i>
+        </button>`;
+    }).join('');
+}
+
+function renderRiddleList() {
+    const n = rally.riddles.length;
+    document.getElementById('riddle-count').textContent = plural(n, 'clue');
+    document.getElementById('riddle-list').innerHTML = rally.riddles.map((r, i) => {
+        const active = i === editIdx;
+        return `<div data-i="${i}" class="p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between gap-2 ${active ? 'bg-indigo-50 border-indigo-600 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}">
+                    <i class="fa-solid ${TYPES[r.type].icon}"></i>
+                </div>
+                <div class="min-w-0">
+                    <h4 class="font-bold text-slate-900 text-sm leading-tight truncate">${i + 1}. ${esc(r.title)}</h4>
+                    <span class="text-xs text-slate-500">${TYPES[r.type].label} · ${plural(r.variants.length, 'version')}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <span class="font-mono font-black text-indigo-600 bg-indigo-100/60 px-2 py-1 rounded-md text-xs">${esc(rally.targetWord[i])}</span>
+                <div class="flex flex-col">
+                    <button data-move="-1" data-i="${i}" ${i === 0 ? 'disabled' : ''} class="px-1.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20" aria-label="Move up"><i class="fa-solid fa-chevron-up text-xs"></i></button>
+                    <button data-move="1" data-i="${i}" ${i === n - 1 ? 'disabled' : ''} class="px-1.5 text-slate-400 hover:text-indigo-600 disabled:opacity-20" aria-label="Move down"><i class="fa-solid fa-chevron-down text-xs"></i></button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function onListClick(e) {
+    const mv = e.target.closest('[data-move]');
+    if (mv) {
+        e.stopPropagation();
+        if (!mv.disabled) moveRiddle(+mv.dataset.i, +mv.dataset.move);
+        return;
+    }
+    const item = e.target.closest('[data-i]');
+    if (item) selectRiddle(+item.dataset.i);
+}
+
+function selectRiddle(i) {
+    editIdx = i; editVar = 0;
+    renderWordSlots(); renderRiddleList(); renderEditor();
+}
+
+function moveRiddle(i, d) {
+    const j = i + d;
+    if (j < 0 || j >= rally.riddles.length) return;
+    [rally.riddles[i], rally.riddles[j]] = [rally.riddles[j], rally.riddles[i]];
+    if (editIdx === i) editIdx = j; else if (editIdx === j) editIdx = i;
+    save(); renderBuilder();
+}
+
+function renderEditor() {
+    const r = rally.riddles[editIdx];
+    if (!r) return;
+    if (editVar >= r.variants.length) editVar = 0;
+    const v = r.variants[editVar];
+    const letter = rally.targetWord[editIdx];
+
+    document.getElementById('editor').innerHTML = `
+        <div class="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-slate-200 mb-5">
+            <div>
+                <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider"><i class="fa-solid ${TYPES[r.type].icon} mr-1"></i>${TYPES[r.type].label}</span>
+                <h3 class="text-xl font-bold text-slate-900 mt-2">Clue #${editIdx + 1}</h3>
+            </div>
+            <div class="text-sm font-semibold text-slate-500 text-right">
+                Reveals evidence letter #${editIdx + 1}
+                <div class="text-3xl font-black text-indigo-600 font-mono leading-none mt-1">${esc(letter)}</div>
+            </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+            ${field('Clue title', `<input data-r="title" maxlength="60" value="${esc(r.title)}" class="${INPUT}">`)}
+            ${field('Puzzle type', `<select id="type-select" class="${INPUT}">${TYPE_ORDER.map(t => `<option value="${t}" ${t === r.type ? 'selected' : ''}>${TYPES[t].label}</option>`).join('')}</select>`)}
+        </div>
+        <p class="text-xs text-slate-500 mt-2">${TYPES[r.type].desc}</p>
+
+        <div class="mt-5">
+            <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
+                <span class="text-xs font-bold text-slate-600 uppercase">Versions of this clue</span>
+                <span class="text-xs text-slate-400">A random version is picked each time the rally is played</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                ${r.variants.map((_, k) => `<button data-act="var" data-k="${k}" class="px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${k === editVar ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400'}">Version ${k + 1}</button>`).join('')}
+                <button data-act="addvar" class="px-3 py-1.5 rounded-lg text-xs font-bold border-2 border-dashed border-indigo-300 text-indigo-700 hover:bg-indigo-50"><i class="fa-solid fa-plus"></i> New version</button>
+                <button data-act="dupvar" class="px-3 py-1.5 rounded-lg text-xs font-bold border-2 border-dashed border-slate-300 text-slate-600 hover:bg-slate-50"><i class="fa-regular fa-copy"></i> Duplicate</button>
+            </div>
+        </div>
+
+        <div class="mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+            ${variantFields(r.type, v)}
+            ${r.type === 'sliding' ? '' : field('Inspector\'s tip <span class="normal-case font-semibold text-slate-400">(optional – shown first when detectives ask for help)</span>',
+                `<textarea data-v="hint" rows="2" class="${INPUT}" placeholder="e.g. Think about what you find on a shelf. Automatic tips (like the first letter) are added after yours.">${esc(v.hint)}</textarea>`)}
+            <div id="editor-check"></div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap justify-between gap-3">
+            <button data-act="delvar" ${r.variants.length < 2 ? 'disabled' : ''} class="px-4 py-2 rounded-xl text-sm font-bold text-rose-600 border-2 border-rose-200 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent">
+                <i class="fa-solid fa-trash-can"></i> Delete version ${editVar + 1}
+            </button>
+            <button data-act="test" class="${BTN} text-sm">
+                <i class="fa-solid fa-play"></i> Test this version
+            </button>
+        </div>
+        <p class="text-xs text-slate-400 text-right mt-2"><i class="fa-solid fa-floppy-disk"></i> Changes are saved automatically.</p>
+    `;
+    updateEditorCheck();
+}
+
+function variantFields(type, v) {
+    switch (type) {
+        case 'crossword':
+            return field('Answer word (letters only)', `<input data-v="word" maxlength="12" value="${esc(v.word)}" class="${INPUT} font-mono uppercase tracking-widest">`) +
+                   field('Clue', `<textarea data-v="clue" rows="2" class="${INPUT}">${esc(v.clue)}</textarea>`);
+        case 'sliding':
+            return `<div class="grid sm:grid-cols-2 gap-4">` +
+                   field('Picture', `<select data-v="picture" class="${INPUT}">${PICTURE_KEYS.map(k => `<option value="${k}" ${k === v.picture ? 'selected' : ''}>${PICTURES[k].name}</option>`).join('')}</select>`) +
+                   field('Difficulty', `<select data-v="size" class="${INPUT}">${[[2, 'Super easy – 2 × 2 pieces'], [3, 'Easy – 3 × 3 pieces'], [4, 'Hard – 4 × 4 pieces']].map(([n, l]) => `<option value="${n}" ${v.size === n ? 'selected' : ''}>${l}</option>`).join('')}</select>`) +
+                   `</div>` +
+                   field('Instruction shown to players', `<input data-v="task" value="${esc(v.task)}" class="${INPUT}">`);
+        case 'cipher':
+            return `<div class="grid sm:grid-cols-2 gap-4">` +
+                   field('Secret word (A–Z only)', `<input data-v="word" maxlength="12" value="${esc(v.word)}" class="${INPUT} font-mono uppercase tracking-widest">`) +
+                   field('Wheel shift (1–25)', `<input data-v="shift" type="number" min="1" max="25" value="${v.shift}" class="${INPUT}">`) +
+                   `</div>` +
+                   `<label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input data-v="showKey" type="checkbox" ${v.showKey ? 'checked' : ''} class="w-4 h-4 accent-indigo-600"> Show players a key clue (e.g. "A is written as D")</label>` +
+                   field('Instruction / clue', `<input data-v="clue" value="${esc(v.clue)}" class="${INPUT}">`);
+        case 'scramble':
+            return field('Word to unscramble (letters only)', `<input data-v="word" maxlength="12" value="${esc(v.word)}" class="${INPUT} font-mono uppercase tracking-widest">`) +
+                   field('Clue', `<textarea data-v="clue" rows="2" class="${INPUT}">${esc(v.clue)}</textarea>`);
+        case 'quiz':
+            return field('Question / riddle', `<textarea data-v="question" rows="3" class="${INPUT}">${esc(v.question)}</textarea>`) +
+                   `<div class="grid sm:grid-cols-2 gap-3">${v.options.map((o, k) => field(`Option ${k + 1}`, `<input data-v="options" data-i="${k}" value="${esc(o)}" class="${INPUT}">`)).join('')}</div>` +
+                   field('Correct answer', `<select data-v="correct" class="${INPUT}">${v.options.map((_, k) => `<option value="${k}" ${k === v.correct ? 'selected' : ''}>Option ${k + 1}</option>`).join('')}</select>`);
+    }
+    return '';
+}
+
+function onEditorInput(e) {
+    const t = e.target;
+    const r = rally.riddles[editIdx];
+    const v = r.variants[editVar];
+    if (t.id === 'type-select') return;
+
+    if (t.dataset.r === 'title') {
+        r.title = t.value.slice(0, 60);
+    } else if (t.dataset.v) {
+        const k = t.dataset.v;
+        if (k === 'word') {
+            const c = r.type === 'cipher' ? cipherWord(t.value) : cleanWord(t.value, 12);
+            if (t.value.toUpperCase() !== c) t.value = c;
+            v.word = c;
+        }
+        else if (k === 'shift')   v.shift = clampInt(t.value, 1, 25, 3);
+        else if (k === 'size')    v.size = [2, 3, 4].includes(parseInt(t.value, 10)) ? parseInt(t.value, 10) : 3;
+        else if (k === 'showKey') v.showKey = t.checked;
+        else if (k === 'correct') v.correct = parseInt(t.value, 10) || 0;
+        else if (k === 'options') v.options[+t.dataset.i] = t.value;
+        else v[k] = t.value;
+    } else {
+        return;
+    }
+    save();
+    renderRiddleList();
+    renderWordSlots();
+    updateEditorCheck();
+}
+
+function onEditorClick(e) {
+    const b = e.target.closest('[data-act]');
+    if (!b || b.disabled) return;
+    const r = rally.riddles[editIdx];
+    const letter = rally.targetWord[editIdx];
+    switch (b.dataset.act) {
+        case 'var':
+            editVar = +b.dataset.k;
+            break;
+        case 'addvar':
+            r.variants.push(defaultVariant(r.type, letter, editIdx + r.variants.length));
+            editVar = r.variants.length - 1;
+            showToast('New version added – edit it below.');
+            break;
+        case 'dupvar':
+            r.variants.push(JSON.parse(JSON.stringify(r.variants[editVar])));
+            editVar = r.variants.length - 1;
+            showToast('Version duplicated.');
+            break;
+        case 'delvar':
+            if (r.variants.length < 2 || !confirm(`Delete version ${editVar + 1} of this clue?`)) return;
+            r.variants.splice(editVar, 1);
+            editVar = Math.max(0, editVar - 1);
+            break;
+        case 'test':
+            if (!validateVariant(r.type, r.variants[editVar])) return;
+            switchTab('play', { step: editIdx, variant: editVar });
+            return;
+    }
+    save();
+    renderRiddleList();
+    renderEditor();
+}
+
+function changeType(newType) {
+    const r = rally.riddles[editIdx];
+    if (newType === r.type) return;
+    if (!confirm(`Switch clue #${editIdx + 1} to "${TYPES[newType].label}"?\nIts ${plural(r.variants.length, 'version')} will be replaced by an example you can edit.`)) {
+        renderEditor();
+        return;
+    }
+    if (r.title === TYPES[r.type].label) r.title = TYPES[newType].label;
+    r.type = newType;
+    r.variants = [defaultVariant(newType, rally.targetWord[editIdx], editIdx)];
+    editVar = 0;
+    save();
+    renderBuilder();
+}
+
+function validateVariant(type, v) {
+    let msg = '';
+    if ((type === 'crossword' || type === 'cipher') && v.word.length < 2) msg = 'The answer needs at least 2 letters.';
+    if (type === 'scramble' && v.word.length < 3) msg = 'The word needs at least 3 letters.';
+    if (type === 'quiz' && !(v.options[v.correct] || '').trim()) msg = 'The correct answer option is empty.';
+    if (type === 'quiz' && v.options.filter(o => o.trim()).length < 2) msg = 'Fill in at least two options.';
+    if (msg) { showToast(msg, true); return false; }
+    return true;
+}
+
+function updateEditorCheck() {
+    const box = document.getElementById('editor-check');
+    if (!box) return;
+    const r = rally.riddles[editIdx];
+    const v = r.variants[editVar];
+    const letter = rally.targetWord[editIdx];
+    const ok = t => `<div class="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-3"><i class="fa-solid fa-circle-check mr-1"></i>${t}</div>`;
+    const warn = t => `<div class="text-xs font-semibold text-rose-800 bg-rose-50 border border-rose-200 rounded-xl p-3"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${t}</div>`;
+    const info = t => `<div class="text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl p-3"><i class="fa-solid fa-circle-info mr-1"></i>${t}</div>`;
+    let html = '';
+
+    if (r.type === 'crossword') {
+        if (v.word.length < 2) html = warn('Enter an answer with at least 2 letters.');
+        else if (v.word.includes(letter)) html = ok(`Boxes with the letter <b>${esc(letter)}</b> will glow – a small link to the secret word.`);
+        else html = info(`Optional: if the answer contains <b>${esc(letter)}</b>, those boxes glow as a link to the secret letter.`);
+    } else if (r.type === 'sliding') {
+        html = `<div class="flex items-center gap-3 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl p-3">
+            <img src="${PICTURES[v.picture].url}" alt="" class="w-20 h-20 rounded-lg border border-slate-200">
+            <span>The pieces are shuffled randomly every time. Each tip from the inspector restores one more row, starting at the top.</span></div>`;
+    } else if (r.type === 'cipher') {
+        if (v.word.length < 2) html = warn('Enter a secret word with at least 2 letters.');
+        else html = ok(`Players see the code <b class="font-mono tracking-widest">${encode(v.word, v.shift)}</b>${v.showKey ? ` and the key clue "A is written as ${shiftLetter('A', v.shift)}"` : ' (no key clue – they have to find the right wheel position themselves)'}.`);
+    } else if (r.type === 'scramble') {
+        html = v.word.length < 3 ? warn('Enter a word with at least 3 letters.') : ok('The letters are mixed up freshly every time the rally is played.');
+    } else if (r.type === 'quiz') {
+        const filled = v.options.filter(o => o.trim()).length;
+        if (filled < 2) html = warn('Fill in at least two options.');
+        else if (!(v.options[v.correct] || '').trim()) html = warn('The option marked as correct is empty.');
+        else html = ok(`Correct answer: <b>${esc(v.options[v.correct])}</b>. Empty options are hidden from players.`);
+    }
+    box.innerHTML = html;
+}
+
+// =========================================================================
+// PLAY MODE
+// =========================================================================
+function startPlay(opts = {}) {
+    const testing = opts.variant != null;
+    play = {
+        current: opts.step || 0,
+        variant: rally.riddles.map((r, i) => (testing && i === opts.step) ? opts.variant : Math.floor(Math.random() * r.variants.length)),
+        solved: {},
+        hintsShown: {},
+        hintsUsed: 0,
+        state: {}
+    };
+    document.getElementById('preview-text').innerHTML = testing
+        ? `<i class="fa-solid fa-flask mr-1"></i> Testing <b>version ${opts.variant + 1}</b> of clue ${opts.step + 1}. Other clues use random versions.`
+        : `<i class="fa-solid fa-eye mr-1"></i> Teacher preview – each clue shows a random version.`;
+    document.getElementById('victory-screen').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    renderPlaySlots();
+    loadStep(play.current);
+}
+
+function renderPlaySlots() {
+    document.getElementById('play-slots').innerHTML = [...rally.targetWord].map((ch, i) => {
+        const open = play.solved[i];
+        return `<div class="w-11 h-14 sm:w-14 sm:h-16 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl sm:text-3xl transition-all shadow-md ${open ? 'bg-amber-400 border-amber-500 text-slate-900 scale-105' : 'bg-slate-100 border-slate-300 text-slate-300'}">${open ? esc(ch) : '?'}</div>`;
+    }).join('');
+}
+
+function renderPlaySteps() {
+    document.getElementById('play-steps').innerHTML = rally.riddles.map((r, i) => {
+        const done = play.solved[i];
+        const active = i === play.current;
+        return `<button onclick="loadStep(${i})" class="px-3 py-1.5 rounded-xl font-bold text-xs transition-all inline-flex items-center gap-1.5 ${active ? 'bg-indigo-600 text-white shadow-md' : done ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}">
+            Clue ${i + 1} ${done ? '<i class="fa-solid fa-check"></i>' : ''}
+        </button>`;
+    }).join('');
+}
+
+function loadStep(i) {
+    play.current = i;
+    renderPlaySteps();
+    const r = rally.riddles[i];
+    const v = r.variants[play.variant[i]];
+    const card = document.getElementById('play-card');
+    card.innerHTML = `
+        <div class="mb-6 pb-4 border-b border-slate-200 flex flex-wrap justify-between items-start gap-3">
+            <div>
+                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Clue ${i + 1} of ${rally.riddles.length}</span>
+                <h3 class="text-2xl font-bold text-slate-900">${esc(r.title)}</h3>
+            </div>
+            <span class="px-3 py-1 bg-amber-100 text-amber-900 font-bold text-xs rounded-full inline-flex items-center gap-1">
+                <i class="fa-solid fa-fingerprint"></i> Evidence letter #${i + 1}
+            </span>
+        </div>
+        <div id="game-body"></div>
+        <div id="hint-zone"></div>
+        ${!studentMode && !play.solved[i] ? `<div class="text-center mt-4"><button onclick="solve(${i})" class="text-xs text-slate-400 hover:text-indigo-600 hover:underline">Skip (teacher preview only)</button></div>` : ''}
+    `;
+    const body = card.querySelector('#game-body');
+    if (play.solved[i]) { renderSolved(body, r, v, i); return; }
+    ({ crossword: renderCrossword, sliding: renderSliding, cipher: renderCipher, scramble: renderScramble, quiz: renderQuiz })[r.type](body, r, v, i);
+    renderHints(i);
+}
+
+function solve(i) {
+    if (play.solved[i]) return;
+    play.solved[i] = true;
+    showToast(`Clue cracked! Evidence letter #${i + 1} collected.`);
+    renderPlaySlots();
+    renderPlaySteps();
+    if (typeof confetti === 'function') confetti({ particleCount: 50, spread: 65, origin: { y: 0.6 } });
+    if (Object.keys(play.solved).length === rally.riddles.length) {
+        loadStep(i);
+        setTimeout(showVictory, 1100);
+    } else {
+        loadStep(i);
+    }
+}
+
+function renderSolved(body, r, v, i) {
+    let answer = '';
+    if (r.type === 'sliding') answer = `<img src="${PICTURES[v.picture].url}" alt="" class="w-40 h-40 rounded-xl mx-auto shadow-md">`;
+    else if (r.type === 'quiz') answer = `<div class="font-bold text-lg text-slate-800">${esc(v.options[v.correct])}</div>`;
+    else answer = `<div class="font-mono font-black text-2xl tracking-widest text-indigo-800">${esc(v.word)}</div>`;
+
+    let next = null;
+    for (let k = 1; k < rally.riddles.length; k++) {
+        const j = (i + k) % rally.riddles.length;
+        if (!play.solved[j]) { next = j; break; }
+    }
+    body.innerHTML = `
+        <div class="text-center space-y-4 py-4">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto"><i class="fa-solid fa-check"></i></div>
+            <span class="stamp text-sm">Solved</span><h4 class="text-xl font-bold text-slate-900">Clue cracked!</h4>
+            ${answer}
+            <p class="font-semibold text-slate-600 flex items-center justify-center gap-2 flex-wrap">Evidence letter #${i + 1}:
+                <span class="inline-flex w-10 h-12 items-center justify-center bg-amber-400 rounded-xl font-mono font-black text-2xl text-slate-900">${esc(rally.targetWord[i])}</span>
+            </p>
+            ${next !== null ? `<button onclick="loadStep(${next})" class="${BTN}">Next clue <i class="fa-solid fa-arrow-right"></i></button>` : ''}
+        </div>`;
+}
+
+function showVictory() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('victory-screen').classList.remove('hidden');
+    document.getElementById('victory-word').innerText = rally.targetWord;
+    document.getElementById('victory-hints').innerText = play.hintsUsed === 0
+        ? 'Solved without a single tip – a true master detective!'
+        : `Tips from the inspector used: ${play.hintsUsed}`;
+    if (typeof confetti !== 'function') return;
+    const end = Date.now() + 3000;
+    (function frame() {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+        if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+}
+
+// ---------- HINTS ----------
+function getHints(r, v) {
+    const h = [];
+    if (r.type !== 'sliding' && v.hint && v.hint.trim()) h.push({ text: v.hint.trim() });
+    switch (r.type) {
+        case 'crossword':
+        case 'scramble':
+            h.push({ text: `The answer starts with "${v.word[0]}".` });
+            if (v.word.length > 2) h.push({ text: `The answer ends with "${v.word.slice(-1)}".` });
+            break;
+        case 'sliding':
+        {
+            // One tip per row: tip 1 restores row 1, tip 2 restores row 2 … the last tip finishes the photo
+            const N = v.size;
+            const names = ['first', 'second', 'third', 'fourth'];
+            for (let row = 0; row < N; row++) {
+                h.push({
+                    text: row === N - 1
+                        ? 'The inspector put the last pieces in place – photo restored!'
+                        : `The inspector restored the ${names[row]} row for you. Fix the rest!`,
+                    action: 'row', row
+                });
+            }
+        }
+            break;
+        case 'cipher':
+            if (!v.showKey) h.push({ text: `Key clue: in this code, A is written as "${shiftLetter('A', v.shift)}". Turn the wheel until the gold A sits under the ${shiftLetter('A', v.shift)}.` });
+            h.push({ text: `Turn the wheel to position ${v.shift}.` });
+            h.push({ text: `The decoded word starts with "${v.word[0]}".` });
+            break;
+        case 'quiz': {
+            const wrongCount = v.options.filter((o, k) => o.trim() && k !== v.correct).length;
+            for (let k = 0; k < Math.min(2, wrongCount - 1); k++) h.push({ text: 'A wrong answer has been crossed out.', action: 'removeWrong' });
+            break;
+        }
+    }
+    return h;
+}
+
+function renderHints(i) {
+    const zone = document.getElementById('hint-zone');
+    if (!zone) return;
+    const r = rally.riddles[i];
+    const v = r.variants[play.variant[i]];
+    const hints = getHints(r, v);
+    const shown = play.hintsShown[i] || 0;
+    zone.innerHTML = `
+        <div class="mt-6 pt-4 border-t border-slate-200">
+            <div class="space-y-2">
+                ${hints.slice(0, shown).map((h, k) => `
+                    <div class="p-3 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-900 flex gap-2 text-left">
+                        <i class="fa-solid fa-user-tie text-amber-700 mt-0.5"></i>
+                        <div><span class="font-bold">Inspector's tip ${k + 1}:</span> ${esc(h.text)}</div>
+                    </div>`).join('')}
+            </div>
+            ${shown < hints.length
+                ? `<div class="text-center mt-3"><button id="hint-btn" class="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-amber-100 font-bold rounded-xl text-sm inline-flex items-center gap-2"><i class="fa-solid fa-user-tie"></i> ${shown ? 'Ask for another tip' : 'Ask the inspector for a tip'} <span class="opacity-60 text-xs">(${shown}/${hints.length})</span></button></div>`
+                : `<p class="text-center text-xs text-slate-400 mt-3">The inspector has no more tips for this clue.</p>`}
+        </div>`;
+    const btn = zone.querySelector('#hint-btn');
+    if (btn) btn.onclick = () => {
+        const h = hints[shown];
+        play.hintsShown[i] = shown + 1;
+        play.hintsUsed++;
+        applyHintAction(i, h, v);
+        renderHints(i);
+    };
+}
+
+function applyHintAction(i, h, v) {
+    const action = h.action;
+    const st = play.state[i];
+    if (!st) return;
+    if (action === 'row') {
+        // rows 0..h.row are put in place; the rest is reshuffled (still solvable)
+        st.board = shuffledBoard(st.N, h.row + 1);
+        updateSlideTiles(i);
+        if (st.board.every((x, k) => x === k)) setTimeout(() => solve(i), 500);
+    }
+    if (action === 'removeWrong') {
+        const candidates = v.options.map((o, k) => k).filter(k => v.options[k].trim() && k !== v.correct && !st.removed.includes(k) && !st.wrong.includes(k));
+        if (candidates.length) st.removed.push(candidates[Math.floor(Math.random() * candidates.length)]);
+        updateQuizButtons(i);
+    }
+}
+
+// ---------- 1. WORD BOXES ----------
+function renderCrossword(body, r, v, i) {
+    const st = play.state[i] || (play.state[i] = { entries: Array(v.word.length).fill('') });
+    const letter = rally.targetWord[i];
+    body.innerHTML = `
+        <div class="space-y-6 text-center">
+            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-slate-800 text-sm font-semibold">
+                <i class="fa-solid fa-magnifying-glass text-indigo-600 mr-2"></i>${esc(v.clue)}
+            </div>
+            <div id="cw-row" class="flex justify-center flex-wrap gap-1.5 sm:gap-2">
+                ${[...v.word].map((ch, k) => `<input maxlength="1" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Letter ${k + 1}"
+                    class="cw-cell w-10 h-12 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-black font-mono uppercase rounded-xl border-2 shadow-sm focus:outline-none focus:border-indigo-600 ${ch === letter ? 'bg-amber-100 border-amber-400 text-amber-900' : 'bg-white border-slate-300 text-slate-800'}"
+                    value="${esc(st.entries[k])}">`).join('')}
+            </div>
+            <p class="text-xs text-slate-500">${v.word.length} letters</p>
+            <button id="cw-check" class="${BTN}"><i class="fa-solid fa-check"></i> Check answer</button>
+        </div>`;
+    const cells = [...body.querySelectorAll('.cw-cell')];
+    const check = () => {
+        const entered = st.entries.join('');
+        if (entered === v.word) solve(i);
+        else {
+            shakeEl(body.querySelector('#cw-row'));
+            showToast(entered.length < v.word.length ? 'Fill in every box first.' : 'Not quite, detective – look again!', true);
+        }
+    };
+    cells.forEach((c, k) => {
+        c.addEventListener('input', () => {
+            const val = cleanWord(c.value).slice(-1);
+            c.value = val;
+            st.entries[k] = val;
+            if (val && k < cells.length - 1) cells[k + 1].focus();
+        });
+        c.addEventListener('keydown', e => {
+            if (e.key === 'Backspace' && !c.value && k > 0) { cells[k - 1].focus(); }
+            else if (e.key === 'ArrowLeft' && k > 0) cells[k - 1].focus();
+            else if (e.key === 'ArrowRight' && k < cells.length - 1) cells[k + 1].focus();
+            else if (e.key === 'Enter') check();
+        });
+        c.addEventListener('focus', () => c.select());
+    });
+    body.querySelector('#cw-check').onclick = check;
+}
+
+// ---------- 2. PICTURE SLIDER ----------
+// Shuffles the photo by random moves from the solved state (so it is always solvable).
+// Rows above fixedRows stay in place – used by the inspector's tips.
+function shuffledBoard(N, fixedRows = 0) {
+    const blankTile = N * N - 1;
+    const b = [...Array(N * N).keys()];
+    if (fixedRows >= N) return b;
+    let blank = blankTile, prev = -1;
+    const steps = { 2: 40, 3: 90, 4: 200 }[N] || 90;
+    for (let s = 0; s < steps; s++) {
+        const row = Math.floor(blank / N), col = blank % N;
+        const nb = [];
+        if (row > fixedRows) nb.push(blank - N);
+        if (row < N - 1) nb.push(blank + N);
+        if (col > 0) nb.push(blank - 1);
+        if (col < N - 1) nb.push(blank + 1);
+        let options = nb.filter(x => x !== prev);
+        if (!options.length) options = nb;
+        const n = options[Math.floor(Math.random() * options.length)];
+        b[blank] = b[n]; b[n] = blankTile;
+        prev = blank; blank = n;
+    }
+    if (b.every((x, k) => x === k)) {
+        // only one row left to fix: just slide the gap one step left so it isn't already solved
+        if (fixedRows === N - 1) { b[blankTile] = b[blankTile - 1]; b[blankTile - 1] = blankTile; return b; }
+        return shuffledBoard(N, fixedRows);
+    }
+    return b;
+}
+
+function renderSliding(body, r, v, i) {
+    const N = [2, 3, 4].includes(v.size) ? v.size : 3;
+    let st = play.state[i];
+    if (!st || st.N !== N) st = play.state[i] = { N, board: shuffledBoard(N), moves: 0 };
+    body.innerHTML = `
+        <div class="space-y-4 text-center">
+            <p class="text-sm font-semibold text-slate-700">${esc(v.task || 'Someone tore up this photo! Slide the pieces back into place to restore the evidence.')}</p>
+            <p class="text-xs text-slate-400">Tap a piece next to the empty space to slide it.</p>
+            <div id="slide-board" class="relative mx-auto bg-stone-900 border-4 border-stone-100 rounded-md overflow-hidden shadow-xl" style="width:min(20rem,80vw);aspect-ratio:1/1"></div>
+            <p class="text-xs font-semibold text-slate-500">Moves: <span id="slide-moves">0</span></p>
+            <button id="slide-reshuffle" class="text-xs font-bold text-indigo-600 hover:underline"><i class="fa-solid fa-shuffle"></i> Mix the pieces again</button>
+        </div>`;
+    const board = body.querySelector('#slide-board');
+    const pct = 100 / N;
+    for (let t = 0; t < N * N - 1; t++) {
+        const tile = document.createElement('div');
+        tile.className = 'slide-tile';
+        tile.dataset.t = t;
+        tile.style.width = pct + '%';
+        tile.style.height = pct + '%';
+        tile.style.backgroundImage = `url("${PICTURES[v.picture].url}")`;
+        tile.style.backgroundSize = `${N * 100}% ${N * 100}%`;
+        tile.style.backgroundPosition = `${(t % N) * 100 / (N - 1)}% ${Math.floor(t / N) * 100 / (N - 1)}%`;
+        tile.onclick = () => slideTile(i, t);
+        board.appendChild(tile);
+    }
+    updateSlideTiles(i);
+    body.querySelector('#slide-reshuffle').onclick = () => {
+        st.board = shuffledBoard(N, play.hintsShown[i] || 0);
+        st.moves = 0;
+        updateSlideTiles(i);
+    };
+}
+
+function updateSlideTiles(i) {
+    const st = play.state[i];
+    const boardEl = document.getElementById('slide-board');
+    if (!st || !boardEl) return;
+    const N = st.N, pct = 100 / N;
+    st.board.forEach((t, pos) => {
+        if (t === N * N - 1) return;
+        const el = boardEl.querySelector(`[data-t="${t}"]`);
+        el.style.left = (pos % N) * pct + '%';
+        el.style.top = Math.floor(pos / N) * pct + '%';
+    });
+    const m = document.getElementById('slide-moves');
+    if (m) m.textContent = st.moves;
+}
+
+function slideTile(i, t) {
+    const st = play.state[i];
+    const N = st.N, blankTile = N * N - 1;
+    const pos = st.board.indexOf(t), blank = st.board.indexOf(blankTile);
+    const dist = Math.abs(Math.floor(pos / N) - Math.floor(blank / N)) + Math.abs(pos % N - blank % N);
+    if (dist !== 1) return;
+    st.board[blank] = t;
+    st.board[pos] = blankTile;
+    st.moves++;
+    updateSlideTiles(i);
+    if (st.board.every((x, k) => x === k)) setTimeout(() => solve(i), 350);
+}
+
+// ---------- 3. CODE WHEEL ----------
+const WHEEL_STEP = 360 / 26;
+
+function wheelSVG(coded) {
+    const cx = 150, cy = 150;
+    const pt = (R, deg) => { const a = (deg - 90) * Math.PI / 180; return [cx + R * Math.cos(a), cy + R * Math.sin(a)]; };
+    let outer = '', inner = '', ticks = '';
+    for (let j = 0; j < 26; j++) {
+        const d = j * WHEEL_STEP;
+        const [x, y] = pt(130, d);
+        const hl = coded.includes(LETTERS[j]);
+        outer += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" transform="rotate(${d.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" text-anchor="middle" dominant-baseline="central" font-size="${hl ? 17 : 13}" font-weight="800" fill="${hl ? '#8b2e1f' : '#3f3326'}">${LETTERS[j]}</text>`;
+        const [x2, y2] = pt(96, d);
+        inner += `<text x="${x2.toFixed(1)}" y="${y2.toFixed(1)}" transform="rotate(${d.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)})" text-anchor="middle" dominant-baseline="central" font-size="${j === 0 ? 16 : 13}" font-weight="800" fill="${j === 0 ? '#e8d39a' : '#f6eedb'}">${LETTERS[j]}</text>`;
+        const [a1, b1] = pt(114, d + WHEEL_STEP / 2), [a2, b2] = pt(146, d + WHEEL_STEP / 2);
+        ticks += `<line x1="${a1.toFixed(1)}" y1="${b1.toFixed(1)}" x2="${a2.toFixed(1)}" y2="${b2.toFixed(1)}" stroke="#c9a24a" stroke-width="1"/>`;
+    }
+    return `<svg id="wheel" viewBox="0 0 300 300" class="w-72 h-72 max-w-full select-none" style="touch-action:none;font-family:ui-monospace,monospace">
+        <circle cx="150" cy="150" r="147" fill="#f3e7c4" stroke="#8f6a28" stroke-width="4"/>
+        ${ticks}${outer}
+        <g id="wheel-inner" class="wheel-inner">
+            <circle cx="150" cy="150" r="113" fill="#2b211b" stroke="#c9a24a" stroke-width="3"/>
+            ${inner}
+            <circle cx="150" cy="150" r="74" fill="#8b2e1f"/>
+            <circle cx="150" cy="150" r="66" fill="none" stroke="#d9bc6c" stroke-width="2" stroke-dasharray="4 6"/>
+        </g>
+        <g pointer-events="none" font-family="Special Elite, Courier New, monospace" text-anchor="middle" font-weight="800">
+            <text x="150" y="146" font-size="13" fill="#f3e7c4">DRAG</text>
+            <text x="150" y="164" font-size="11" fill="#e9b8aa">TO TURN</text>
+        </g>
+    </svg>`;
+}
+
+function renderCipher(body, r, v, i) {
+    const st = play.state[i] || (play.state[i] = { turn: 0, entry: '' });
+    const coded = encode(v.word, v.shift);
+    body.innerHTML = `
+        <div class="space-y-5 text-center">
+            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-slate-800 text-sm font-semibold">
+                <i class="fa-solid fa-envelope-open-text text-indigo-600 mr-2"></i>${esc(v.clue)}
+            </div>
+            <div>
+                <div class="text-xs font-bold text-slate-500 uppercase mb-2">Intercepted message</div>
+                <div class="inline-flex gap-1.5 flex-wrap justify-center">
+                    ${[...coded].map(ch => `<span class="w-10 h-12 sm:w-12 sm:h-14 flex items-center justify-center bg-stone-900 text-amber-200 font-mono font-black text-2xl rounded-md shadow">${ch}</span>`).join('')}
+                </div>
+            </div>
+            ${v.showKey ? `<div class="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100 text-amber-900 rounded-full text-sm font-bold"><i class="fa-solid fa-key"></i> Key: the letter A is written as ${shiftLetter('A', v.shift)}</div>` : ''}
+            <div class="flex flex-col items-center gap-3">
+                ${wheelSVG(coded)}
+                <div class="flex items-center gap-3">
+                    <button id="wheel-left" class="w-11 h-11 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-800" aria-label="Turn wheel left"><i class="fa-solid fa-rotate-left"></i></button>
+                    <div class="text-sm font-bold text-slate-600 w-40">Wheel position: <span id="wheel-pos" class="font-mono text-indigo-700"></span></div>
+                    <button id="wheel-right" class="w-11 h-11 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-800" aria-label="Turn wheel right"><i class="fa-solid fa-rotate-right"></i></button>
+                </div>
+                <p class="text-xs text-slate-500 max-w-sm">Outer ring = code letters, inner ring = real letters. Turn the inner wheel until the key matches, then find each code letter on the outer ring and read the letter just inside it.</p>
+            </div>
+            <div class="space-y-2">
+                <label for="cipher-input" class="block text-xs font-bold text-slate-500 uppercase">Decoded word</label>
+                <input id="cipher-input" autocomplete="off" spellcheck="false" value="${esc(st.entry)}"
+                    class="w-60 max-w-full px-4 py-3 border-2 border-slate-300 rounded-xl font-mono text-2xl text-center uppercase tracking-widest font-black focus:outline-none focus:border-indigo-600 shadow-sm">
+            </div>
+            <button id="cipher-check" class="${BTN}"><i class="fa-solid fa-unlock"></i> Crack the code</button>
+        </div>`;
+
+    const g = body.querySelector('#wheel-inner');
+    const svg = body.querySelector('#wheel');
+    const posEl = body.querySelector('#wheel-pos');
+    const pos = () => ((st.turn % 26) + 26) % 26;
+    const update = () => {
+        g.style.transform = `rotate(${st.turn * WHEEL_STEP}deg)`;
+        posEl.textContent = pos();
+    };
+    update();
+    body.querySelector('#wheel-left').onclick = () => { st.turn--; update(); };
+    body.querySelector('#wheel-right').onclick = () => { st.turn++; update(); };
+
+    // Drag to turn
+    let drag = null;
+    const angleOf = e => {
+        const b = svg.getBoundingClientRect();
+        return Math.atan2(e.clientY - (b.top + b.height / 2), e.clientX - (b.left + b.width / 2)) * 180 / Math.PI;
+    };
+    g.addEventListener('pointerdown', e => {
+        drag = { last: angleOf(e), total: 0, t0: st.turn };
+        g.setPointerCapture(e.pointerId);
+        g.classList.add('dragging');
+        e.preventDefault();
+    });
+    g.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const a = angleOf(e);
+        let d = a - drag.last;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        drag.total += d;
+        drag.last = a;
+        g.style.transform = `rotate(${drag.t0 * WHEEL_STEP + drag.total}deg)`;
+        st.turn = drag.t0 + Math.round(drag.total / WHEEL_STEP);
+        posEl.textContent = pos();
+    });
+    const endDrag = () => {
+        if (!drag) return;
+        drag = null;
+        g.classList.remove('dragging');
+        update();
+    };
+    g.addEventListener('pointerup', endDrag);
+    g.addEventListener('pointercancel', endDrag);
+
+    const input = body.querySelector('#cipher-input');
+    input.addEventListener('input', () => { st.entry = input.value; });
+    const check = () => {
+        if (cipherWord(input.value) === v.word) solve(i);
+        else { shakeEl(input); showToast('That message still makes no sense – keep turning!', true); }
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+    body.querySelector('#cipher-check').onclick = check;
+}
+
+// ---------- 4. WORD SCRAMBLE ----------
+function scrambleOrder(word) {
+    const idx = [...word].map((_, k) => k);
+    for (let attempt = 0; attempt < 30; attempt++) {
+        for (let k = idx.length - 1; k > 0; k--) {
+            const j = Math.floor(Math.random() * (k + 1));
+            [idx[k], idx[j]] = [idx[j], idx[k]];
+        }
+        if (idx.map(k => word[k]).join('') !== word) break;
+    }
+    return idx;
+}
+
+function renderScramble(body, r, v, i) {
+    const st = play.state[i] || (play.state[i] = { order: scrambleOrder(v.word), entry: '' });
+    body.innerHTML = `
+        <div class="space-y-6 text-center">
+            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-slate-800 text-sm font-semibold">
+                <i class="fa-solid fa-note-sticky text-indigo-600 mr-2"></i>${esc(v.clue)}
+            </div>
+            <div id="scr-tiles" class="flex justify-center flex-wrap gap-2"></div>
+            <div class="flex justify-center gap-2 items-center">
+                <input id="scr-input" autocomplete="off" spellcheck="false" placeholder="Tap letters or type"
+                    class="w-64 max-w-[70vw] px-4 py-3 border-2 border-slate-300 rounded-xl font-mono text-xl text-center uppercase font-bold tracking-widest focus:outline-none focus:border-indigo-600 shadow-sm">
+                <button id="scr-back" class="w-12 h-12 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700" aria-label="Delete last letter"><i class="fa-solid fa-delete-left"></i></button>
+            </div>
+            <div class="flex justify-center flex-wrap gap-3">
+                <button id="scr-shuffle" class="${BTN2}"><i class="fa-solid fa-shuffle"></i> Mix again</button>
+                <button id="scr-check" class="${BTN}"><i class="fa-solid fa-check"></i> Submit word</button>
+            </div>
+        </div>`;
+    const tilesEl = body.querySelector('#scr-tiles');
+    const input = body.querySelector('#scr-input');
+
+    const draw = () => {
+        // mark the tiles that are already used by the typed answer
+        const used = [];
+        for (const ch of st.entry) {
+            const p = st.order.findIndex((k, pp) => v.word[k] === ch && !used.includes(pp));
+            if (p >= 0) used.push(p);
+        }
+        tilesEl.innerHTML = st.order.map((k, p) => `<button data-p="${p}" ${used.includes(p) ? 'disabled' : ''} class="w-11 h-12 sm:w-12 sm:h-14 rounded-xl font-mono font-black text-2xl bg-amber-100 border-2 border-amber-300 text-indigo-900 shadow-sm hover:bg-amber-200 transition-all disabled:opacity-25 disabled:hover:bg-amber-100">${v.word[k]}</button>`).join('');
+        if (input.value !== st.entry) input.value = st.entry;
+    };
+    draw();
+
+    tilesEl.onclick = e => {
+        const b = e.target.closest('[data-p]');
+        if (!b || b.disabled) return;
+        st.entry = (st.entry + v.word[st.order[+b.dataset.p]]).slice(0, v.word.length);
+        draw();
+    };
+    input.addEventListener('input', () => {
+        st.entry = cleanWord(input.value, v.word.length);
+        draw();
+    });
+    body.querySelector('#scr-back').onclick = () => { st.entry = st.entry.slice(0, -1); draw(); };
+    body.querySelector('#scr-shuffle').onclick = () => { st.order = scrambleOrder(v.word); st.entry = ''; draw(); };
+    const check = () => {
+        if (st.entry === v.word) solve(i);
+        else { shakeEl(tilesEl); showToast(st.entry.length < v.word.length ? 'Use all the letters!' : 'Not quite, detective – look again!', true); }
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+    body.querySelector('#scr-check').onclick = check;
+}
+
+// ---------- 5. RIDDLE QUIZ ----------
+function renderQuiz(body, r, v, i) {
+    if (!play.state[i]) play.state[i] = { removed: [], wrong: [] };
+    body.innerHTML = `
+        <div class="space-y-6">
+            <div class="p-5 bg-stone-900 text-amber-50 rounded-2xl shadow-md border-l-4 border-indigo-600"><div class="typewriter text-xs uppercase tracking-widest text-amber-400 mb-2"><i class="fa-solid fa-user-secret"></i> The suspect says:</div>
+                <p class="text-base sm:text-lg font-bold leading-relaxed">${esc(v.question)}</p>
+            </div>
+            <div id="quiz-opts" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ${v.options.map((o, k) => o.trim() ? `<button data-k="${k}" class="quiz-opt p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-500 font-bold text-left text-sm text-slate-800 transition-all">${esc(o)}</button>` : '').join('')}
+            </div>
+        </div>`;
+    body.querySelectorAll('.quiz-opt').forEach(b => {
+        b.onclick = () => {
+            const k = +b.dataset.k;
+            if (k === v.correct) solve(i);
+            else {
+                play.state[i].wrong.push(k);
+                shakeEl(b);
+                showToast('The suspect smiles… that\'s not it. Try again!', true);
+                updateQuizButtons(i);
+            }
+        };
+    });
+    updateQuizButtons(i);
+}
+
+function updateQuizButtons(i) {
+    const st = play.state[i];
+    document.querySelectorAll('#quiz-opts .quiz-opt').forEach(b => {
+        const k = +b.dataset.k;
+        const out = st.removed.includes(k) || st.wrong.includes(k);
+        b.disabled = out;
+        b.classList.toggle('line-through', out);
+        b.classList.toggle('opacity-40', out);
+        b.classList.toggle('border-rose-300', st.wrong.includes(k));
+    });
+}
+
+</script>
+</body>
+</html>
